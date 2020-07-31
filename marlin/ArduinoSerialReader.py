@@ -8,8 +8,6 @@ from marlin.utils import SensorExistsException
 logging.basicConfig(level=logging.DEBUG)
 
 
-
-
 class ArduinoSerialReader:
     def __init__(self, serial_port, boud_rate=115200, timeout=5):
         self.logger = logging.getLogger(__name__)

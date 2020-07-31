@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+import json
 
 from marlin.MotorController import MotorController
 from marlin.Provider import Provider
@@ -19,18 +20,19 @@ class Boat:
                         BlueBoxSensor(SensorType.DO_T),
                         BlueBoxSensor(SensorType.Pressure),
                         Battery()]
-        self.pump = BlueBoxPump()
-        self.motor_controller = MotorController()
         self.autonomy = Provider().get_Autonomy()
+        self.heading_sensor = Provider().get_heading()
+        self.motor_controller = Provider().get_MotorController()
+        self.goHome = Provider().get_GoHome()
+        self.acs = Provider().get_ACS()
 
     def get_state(self):
         state = {'sensors': [],
                  'GPS': self.GPS.state,
                  'APS': self.APS.state,
                  'driving_mode': self.motor_controller.driving_mode,
-                 'autonomy_speed': self.autonomy.speed,
-                 'reached_point': self.autonomy.next_target,
-                 'pump': self.pump.get_state()
+                 'heading': self.heading_sensor.get_state(),
+                 'autonomy': self.autonomy.get_info(),
                  }
 
         for sensor in self.sensors:
@@ -42,12 +44,10 @@ class Boat:
 
     def start_autonomy(self, data):
         self.logger.debug(data)
+        data = json.loads(data)
         try:
             path = data['path']
-            coordinates = []
-            for coordinate in path:
-                coordinates.append([coordinate['lat'], coordinate['lng']])
-            self.autonomy.set_coordinates(np.array(coordinates))
+            self.autonomy.set_coordinates(path)
             self.autonomy.start()
             return True
         except KeyError as e:
@@ -59,9 +59,26 @@ class Boat:
         return True
 
     def set_speed(self, data):
+        data = json.loads(data)
         try:
             speed = float(data['speed'])
             self.autonomy.set_speed(speed)
+            return True
+        except KeyError as e:
+            self.logger.warning(e)
+        except ValueError as e:
+            self.logger.warning(e)
+        return False
+    
+    def go_home(self):
+        self.goHome.start()
+    
+    def set_home(self, data):
+        data = json.loads(data)
+        try:
+            lat = float(data['lat'])
+            lng = float(data['lng'])
+            self.goHome.set_home(lat, lng)
             return True
         except KeyError as e:
             self.logger.warning(e)

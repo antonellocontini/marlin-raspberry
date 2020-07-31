@@ -1,6 +1,7 @@
 import logging
 import serial
 import time
+import os
 
 from enum import Enum
 from threading import Thread
@@ -13,13 +14,19 @@ class BlueBoxReader:
         self.logger = logging.getLogger(__name__)
         self.serial_port = serial_port
         self.boud_rate = boud_rate
+        self.sensors = {}
+        self.stop = False
+
+        if not os.path.exists(serial_port):
+            self.logger.warning('BlueBox device {} not found'.format(serial_port))
+            return
+
         self.serial_connection = serial.Serial(
             self.serial_port, self.boud_rate, timeout=timeout)
-        self.sensors = {}
 
-        self.stop = False
         self.loop_thread = Thread(target=self._read_loop)
         self.loop_thread.start()
+        self.logger.info('BlueBox OK')
 
     def add_sensor(self, sensor_name, callback):
         if sensor_name in self.sensors:
@@ -74,9 +81,14 @@ class SensorType(Enum):
     PH = 'pH'
     EC = 'Conductivity'
     EC_T = 'Temperature EC'
-    DO = 'Oxygen'
-    DO_T = 'Temperature O2'
+    DO = 'O2'
+    DO_T = 'Temperature'
     Pressure = 'Pressure'
+    TOC = 'TOC'
+    COD = 'COD'
+    NH4N = 'NH4-N'
+    NO3N = 'NO3-N'
+    PO4P = 'PO4-P'
 
 
 class BlueBoxSensor:
@@ -85,6 +97,11 @@ class BlueBoxSensor:
              SensorType.EC_T: 'C',
              SensorType.DO_T: 'C',
              SensorType.DO: 'mg/l',
+             SensorType.TOC: 'mg/l',
+             SensorType.COD: 'mg/l',
+             SensorType.NH4N: 'mg/l',
+             SensorType.NO3N: 'mg/l',
+             SensorType.PO4P: 'mg/l',
              SensorType.Pressure: 'bar'}
 
     def __init__(self, sensor_type):

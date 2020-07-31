@@ -2,17 +2,87 @@ import logging
 import numpy as np
 import utm
 import time
+import asyncio
+import datetime
+import threading
+import socketio
+import tornado
 
+from threading import Thread, Lock
 from marlin.Provider import Provider
 from marlin.utils import closestPointOnLine, directionError
 from marlin.utils import clip, headingToVector, pointDistance
 from simple_pid import PID
 
 
+sio = socketio.AsyncServer(async_mode='tornado')
+app = tornado.web.Application(
+    [
+        (r"/socket.io/", socketio.get_tornado_handler(sio)),
+    ],
+    # ... other application options
+)
+
+boat_heading = 110
+connected = False
+engine_value = {} #{'L':0, 'R':0}
+server_mutex = Lock()
+last_request = None
+jeston_sid = None
+
+
+@sio.event
+def connect(sid, environ):
+    print('autonomy connect ', sid)
+
+@sio.event
+def disconnect(sid):
+    global connected
+    print('autonomy disconnect ', sid)
+    if jetson_sid == sid:
+        connected = False
+    #sio.disconnect(sid)
+
+
+@sio.event
+def register_jetson(sid):
+    global connected, jetson_sid
+    print(sid, 'is jetson')
+    jetson_sid = sid
+    if not connected:
+        print("jetson registered")
+        connected = True
+
+@sio.event
+async def start_OA(sid):
+    await sio.emit('start_OA')
+
+@sio.event
+def register_engine_value(sid, data):
+    global engine_value, server_mutex, connected
+    if connected:
+        server_mutex.acquire()
+        engine_value = data
+        server_mutex.release()
+
+@sio.event
+async def send_state(sid):
+    global boat_heading, last_request
+    last_request = datetime.datetime.now()
+    #boat_heading += 1
+    await sio.emit('register_heading', boat_heading)
+
+def start_server():
+    asyncio.set_event_loop(asyncio.new_event_loop())
+    #thread_print_engine_value.start()
+    app.listen(6000)
+    tornado.ioloop.IOLoop.current().start()
+
+
 class Autonomy:
     def __init__(self, offset=4, min_distance=5):
         self.logger = logging.getLogger(__name__)
-        self.is_running = False
+        self.is_running = True #TODO: mettere a False
         self.pid = (-1, 0, 0.5)
         self.coordinates = np.array([])
         self.coordinates_lat_long = []
@@ -28,6 +98,9 @@ class Autonomy:
         self.name = 'autonomy'
         self.is_go_home = False
         self.off_timestamp = time.time()
+        self.jetson_server_thread = Thread(target=start_server)
+        self.jetson_server_thread.start()
+        self.logger.info("Jetson server has started")
 
     def set_coordinates(self, coordinates, is_go_home=False):
         self.is_go_home = is_go_home
@@ -79,10 +152,18 @@ class Autonomy:
         }
 
     def get_state(self):
+        global boat_heading, server_mutex, engine_value
         # if not running or reached last point
         boat_position = utm.from_latlon(self.GPS.state['lat'],
                                         self.GPS.state['lng'])[:2]
 
+        server_mutex.acquire()
+        boat_heading = self.heading_sensor.get_state()
+        self.logger.info("jetson value: " + str(engine_value))
+        server_mutex.release()
+        boat_direction = headingToVector(self.heading_sensor.get_state())
+        return {'trust': 0, 'turn': 0, 'scale': 0} # TODO: togliere questa parte
+        
         # select next waypoint
         while True:
             # check that boat is running and there are point left
@@ -108,7 +189,6 @@ class Autonomy:
                 boat_position, self.offset)
 
         #boat_direction = headingToVector(self.APS.state['heading'])
-        boat_direction = headingToVector(self.heading_sensor.get_state())
 
         error = directionError(boat_position, target_position, boat_direction)
         correction = self.pid_controller(error)
