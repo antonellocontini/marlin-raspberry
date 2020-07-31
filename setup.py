@@ -19,7 +19,18 @@ setuptools.setup(
         'simple_pid==0.1.4',
         'pyserial==3.4',
         'Adafruit-BNO055==1.0.2',
-        'utm==0.4.2'
-        ]
+        'utm==0.4.2',
+        'bitstring==3.1.5',
+        'python-socketio',
+        'requests',
+        'websocket-client',
+        'PIGPIO',
+        'spidev'
+        ],
+    entry_points={
+          'console_scripts': [
+              'run = marlin.__main__:main'
+          ]
+      },
 )
 
