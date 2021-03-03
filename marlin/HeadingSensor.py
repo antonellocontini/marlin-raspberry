@@ -20,6 +20,7 @@ class HeadingSensor:
         P = np.array([[0]]) # process noise
         self.kf = KalmanFilter(F=F, B=B, H=H, Q=Q, R=R, P=P)
         self.old_heading = self.APS.state['heading']
+        self.old_heading = 0
         self.heading_setup = False
         self.loop_thread = Thread(target=self.update_loop)
         self.loop_thread.start()

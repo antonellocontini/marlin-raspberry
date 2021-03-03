@@ -139,7 +139,7 @@ class RCPi:
 
 if __name__ == '__main__':
     import time
-    rc = RCPi('/dev/ttyUSB0')
+    rc = RCPi('/dev/rc')
     while 1:
         print(rc.is_active())
         print(rc.get_state())
